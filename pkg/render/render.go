@@ -1,20 +1,79 @@
 package render
 
 import (
-	"fmt"
+	"bytes"
 	"html/template"
 	"log"
 	"net/http"
+	"path/filepath"
 )
 
-func RenderTemplateInitial(w http.ResponseWriter, tmpl string) {
-	parsedTemplate, _ := template.ParseFiles("./templates/"+tmpl, "./templates/base.layout.gohtml")
-	err := parsedTemplate.Execute(w, nil)
+func RenderTemplate(w http.ResponseWriter, tmpl string) {
+
+	// create template cache
+	tc, err := createTemplateCache()
 	if err != nil {
-		fmt.Println("Error parsing template", err)
-		return
+		log.Fatal(err)
+	}
+
+	// get requested template from cache
+	t, ok := tc[tmpl]
+	if !ok {
+		log.Fatal(err)
+	}
+
+	buf := new(bytes.Buffer)
+	err = t.Execute(buf, nil)
+	if err != nil {
+		log.Println(err)
+	}
+
+	// render the template
+	_, err = buf.WriteTo(w)
+	if err != nil {
+		log.Println(err)
 	}
 }
+
+func createTemplateCache() (map[string]*template.Template, error) {
+	myCache := map[string]*template.Template{}
+
+	// get all files named *.page.gohtml
+	pages, err := filepath.Glob("./templates/*.page.gohtml")
+	if err != nil {
+		return myCache, err
+	}
+
+	// range through all pages found
+	for _, page := range pages {
+		name := filepath.Base(page)
+		ts, err := template.New(name).ParseFiles(page)
+		if err != nil {
+			return myCache, err
+		}
+
+		// find all layouts
+		layouts, err := filepath.Glob("./templates/*.layout.gohtml")
+		if err != nil {
+			return myCache, err
+		}
+
+		if len(layouts) > 0 {
+			ts, err = ts.ParseGlob("./templates/*.layout.gohtml")
+			if err != nil {
+				return myCache, err
+			}
+		}
+
+		myCache[name] = ts
+	}
+
+	return myCache, nil
+}
+
+/*
+
+A Simple Caching mechanism
 
 var tc = make(map[string]*template.Template)
 
@@ -44,6 +103,7 @@ func RenderTemplate(w http.ResponseWriter, t string) {
 }
 
 func createTemplateCache(t string) error {
+	// need to be updated to include every directory
 	templates := []string{
 		fmt.Sprintf("./templates/%s", t),
 		"./templates/base.layout.gohtml",
@@ -60,3 +120,4 @@ func createTemplateCache(t string) error {
 
 	return nil
 }
+*/
